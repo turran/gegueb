@@ -19,14 +19,161 @@
 
 #include "gegueb_main.h"
 #include "gegueb_window.h"
+
+/*
+ * TODO:
+ * We might need to add a enesim_renderer_commit() function. To just let the
+ * properties be committed without actually drawing. Otherwise in case the
+ * window is not shown it will keep damaging the same areas even if it has
+ * a new set of properties set
+ */
 /*============================================================================*
  *                                  Local                                     *
  *============================================================================*/
 typedef struct _Gegueb_Window
 {
 	Egueb_Dom_Window *ewin;
+	Egueb_Dom_Feature *fwin;
+	Egueb_Dom_Feature *fren;
+	Egueb_Dom_Node *doc;
+	Enesim_Surface *s;
+	cairo_surface_t *cs;
+	Eina_List *damages;
+	GdkRegion *regions;
 	GdkWindow *win;
 } Gegueb_Window;
+
+static void _gegueb_window_draw(Gegueb_Window *thiz)
+{
+	Eina_Rectangle *r;
+	cairo_t *cr;
+
+	if (!thiz->s)
+		return;
+
+	if (!thiz->damages)
+		return;
+
+	egueb_dom_feature_render_draw_list(thiz->fren, thiz->s,
+			ENESIM_ROP_FILL, thiz->damages, 0, 0, NULL);
+	//gdk_window_begin_paint_region(thiz->win, thiz->regions);
+	cr = gdk_cairo_create(thiz->win);
+	gdk_cairo_region(cr, thiz->regions);
+	/* blit */
+	cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+	cairo_set_source_surface(cr, thiz->cs, 0, 0);
+	cairo_paint(cr);
+	cairo_destroy(cr);
+
+	EINA_LIST_FREE(thiz->damages, r)
+	{
+		free(r);
+	}
+	thiz->damages = NULL;
+	gdk_region_empty(thiz->regions);
+	//gdk_window_end_paint(thiz->win);
+	//gdk_window_flush(thiz->win);
+}
+
+static void _gegueb_surface_free(void *buffer_data, void *data)
+{
+	cairo_surface_t *cs = data;
+	cairo_surface_destroy(cs);
+}
+
+static Eina_Bool _gegueb_window_damages(Egueb_Dom_Feature *f,
+		Eina_Rectangle *area, void *data)
+{
+	Gegueb_Window *thiz = data;
+	GdkRectangle rect;
+
+	rect.x = area->x;
+	rect.y = area->y;
+	rect.width = area->w;
+	rect.height = area->h;
+	gdk_window_invalidate_rect(thiz->win, &rect, FALSE); 
+}
+
+static gboolean _gegueb_window_idle_cb(gpointer user_data)
+{
+	Gegueb_Window *thiz = user_data;
+
+	egueb_dom_document_process(thiz->doc);
+	if (!thiz->fren)
+		goto done;
+	if (!thiz->s)
+		goto done;
+	egueb_dom_feature_render_damages_get(thiz->fren, thiz->s,
+				_gegueb_window_damages, thiz);
+done:
+	return TRUE;
+}
+
+static void _gegueb_event_cb(GdkEvent *event, gpointer user_data)
+{
+	Gegueb_Window *thiz = user_data;
+
+	switch(event->type)
+	{
+		case GDK_EXPOSE:
+		case GDK_DAMAGE:
+		{
+			GdkRectangle *rects;
+			Eina_Rectangle *r;
+			int nrects;
+			int i;
+
+			gdk_region_union(thiz->regions, event->expose.region);
+			gdk_region_get_rectangles(event->expose.region, &rects, &nrects);
+			for (i = 0; i < nrects; i++)
+			{
+				r = malloc(sizeof(Eina_Rectangle));
+				r->x = rects[i].x;
+				r->y = rects[i].y;
+				r->w = rects[i].width;
+				r->h = rects[i].height;
+				thiz->damages = eina_list_append(thiz->damages, r);
+			}
+
+			if (!event->expose.count)
+			{
+				_gegueb_window_draw(thiz);
+			}
+		}
+		break;
+
+		case GDK_CONFIGURE:
+		if (thiz->s)
+		{
+			int w, h;
+
+			enesim_surface_size_get(thiz->s, &w, &h);
+			if (w == event->configure.width &&
+					h == event->configure.height)
+				return;
+			enesim_surface_unref(thiz->s);
+		}
+		thiz->cs = cairo_image_surface_create (CAIRO_FORMAT_RGB24,
+				event->configure.width,
+				event->configure.height);
+		thiz->s = enesim_surface_new_data_from(ENESIM_FORMAT_ARGB8888,
+				event->configure.width,
+				event->configure.height,
+				EINA_FALSE,
+				cairo_image_surface_get_data(thiz->cs),
+				cairo_image_surface_get_stride(thiz->cs),
+				_gegueb_surface_free, thiz->cs);
+		egueb_dom_feature_window_size_set(thiz->fwin,
+				event->configure.width,
+				event->configure.height);
+		_gegueb_window_draw(thiz);
+		break;
+
+		case GDK_DELETE:
+		egueb_dom_window_close_notify(thiz->ewin);
+		break;
+	}
+}
 /*----------------------------------------------------------------------------*
  *                               Event handlers                               *
  *----------------------------------------------------------------------------*/
@@ -81,13 +228,98 @@ EAPI Egueb_Dom_Window * gegueb_window_new(Egueb_Dom_Node *doc,
 {
 	Gegueb_Window *thiz;
 	Egueb_Dom_Window *ret = NULL;
+	Egueb_Dom_Node *topmost;
 	GdkWindowAttr attr;
-	GdkWindow *win;
 
-	win = gdk_window_new(NULL, &attr, 0);
+	if (!doc) return NULL;
+
+	topmost = egueb_dom_document_document_element_get(doc);
+	if (!topmost)
+	{
+		ERR("The document does not have a topmost element");
+		goto no_topmost; 
+	}
+
 	thiz = calloc(1, sizeof(Gegueb_Window));
-	thiz->win = win;
+
+	/* check it it has the render feature */
+	thiz->fren = egueb_dom_node_feature_get(topmost, EGUEB_DOM_FEATURE_RENDER_NAME, NULL);
+	if (!thiz->fren)
+	{
+		ERR("The topmost element does not have a render feature");
+		goto no_render;
+	}
+
+	thiz->fwin = egueb_dom_node_feature_get(topmost, EGUEB_DOM_FEATURE_WINDOW_NAME, NULL);
+	if (!thiz->fwin)
+	{
+		ERR("The topmost element does not have a window feature");
+		goto no_window;
+	}
+
+	/* sanitize the width/height */
+	/* in case the user does not provide a size */
+	if (w <= 0 || h <= 0)
+	{
+		Egueb_Dom_Feature_Window_Hint_Data wdata;
+		int whints;
+
+		whints = egueb_dom_feature_window_hints_get(thiz->fwin, &wdata);
+		if (whints & EGUEB_DOM_FEATURE_WINDOW_HINT_PREFERRED)
+		{
+			if (wdata.pref_width != -1 && w == -1)
+				w = wdata.pref_width;
+			if (wdata.pref_height != -1 && h == -1)
+				h = wdata.pref_height;
+		}
+
+		if (whints & EGUEB_DOM_FEATURE_WINDOW_HINT_MIN_MAX)
+		{
+			if (wdata.min_width != -1 && w < wdata.min_width)
+				w = wdata.min_width;
+			if (wdata.min_height != -1 && h < wdata.min_height)
+				h = wdata.min_height;
+
+			if (wdata.max_width != -1 && w > wdata.max_width)
+				w = wdata.max_width;
+			if (wdata.max_height != -1 && h > wdata.max_height)
+				h = wdata.max_height;
+		}
+	}
+
+	if (w <= 0 || h <= 0)
+	{
+		ERR("Invalid size of the window %d %d", w, h);
+		goto no_size;
+	}
+	egueb_dom_feature_window_size_set(thiz->fwin, w, h);
+
+	/* set the window attributes */
+	attr.width = w;
+	attr.height = h;
+	attr.window_type = GDK_WINDOW_TOPLEVEL;
+	attr.event_mask = GDK_EXPOSURE_MASK;
+
+	thiz->regions = gdk_region_new();
+	thiz->doc = doc;
+	thiz->win = gdk_window_new(NULL, &attr, 0);
+	gdk_event_handler_set(_gegueb_event_cb, thiz, NULL);
+	g_idle_add(_gegueb_window_idle_cb, thiz);
+
 	thiz->ewin = egueb_dom_window_new(&_dom_descriptor, doc, thiz);
+	gdk_window_show(thiz->win);
 
 	return thiz->ewin;
+
+no_size:
+	egueb_dom_feature_unref(thiz->fwin);
+no_window:
+	egueb_dom_feature_unref(thiz->fren);
+no_render:
+	egueb_dom_node_unref(topmost);
+no_topmost:
+	egueb_dom_node_unref(doc);
+	free(thiz);
+
+	return NULL;
 }

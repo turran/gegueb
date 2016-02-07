@@ -9,6 +9,9 @@
 #include <unistd.h>
 
 #include "Gegueb.h"
+#include <glib.h>
+
+static GMainLoop *loop;
 
 static void help(const char *name)
 {
@@ -23,7 +26,7 @@ static void help(const char *name)
 static void _gegueb_window_close_cb(Egueb_Dom_Event *e,
 		void *data)
 {
-	g_main_loop_quit();
+	g_main_loop_quit(loop);
 }
 
 int main(int argc, char *argv[])
@@ -119,7 +122,8 @@ int main(int argc, char *argv[])
 			EGUEB_DOM_EVENT_WINDOW_CLOSE,
 			_gegueb_window_close_cb,
 			EINA_TRUE, NULL);
-	g_main_loop_run();
+	loop = g_main_loop_new(NULL, FALSE);
+	g_main_loop_run(loop);
 
 	egueb_dom_window_unref(w);
 	gegueb_shutdown();
