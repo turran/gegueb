@@ -202,15 +202,15 @@ static void _gegueb_event_cb(GdkEvent *event, gpointer user_data)
 		break;
 
 		case GDK_MOTION_NOTIFY:
-		printf("ui motion\n");
+		egueb_dom_input_feed_mouse_move(thiz->input, event->motion.x, event->motion.y);
 		break;
 
 		case GDK_BUTTON_PRESS:
-		printf("ui button press\n");
+		egueb_dom_input_feed_mouse_down(thiz->input, event->button.button);
 		break;
 
 		case GDK_BUTTON_RELEASE:
-		printf("ui button release\n");
+		egueb_dom_input_feed_mouse_up(thiz->input, event->button.button);
 		break;
 
 		case GDK_KEY_PRESS:
@@ -408,6 +408,7 @@ EAPI Egueb_Dom_Window * gegueb_window_new(Egueb_Dom_Node *doc,
 		event_mask |= GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK |
 				GDK_BUTTON_RELEASE_MASK | GDK_KEY_PRESS_MASK |
 				GDK_KEY_RELEASE_MASK;
+		egueb_dom_feature_unref(f);
 	}
 
 	/* set the window attributes */
