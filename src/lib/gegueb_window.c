@@ -20,12 +20,21 @@
 #include "gegueb_main.h"
 #include "gegueb_window.h"
 
+#if BUILD_EGUEB_SMIL
+#include <Egueb_Smil.h>
+#endif
+
 /*
  * TODO:
  * We might need to add a enesim_renderer_commit() function. To just let the
  * properties be committed without actually drawing. Otherwise in case the
  * window is not shown it will keep damaging the same areas even if it has
  * a new set of properties set
+ * Missing features:
+ * IO
+ * Script
+ * Video
+ * UI
  */
 /*============================================================================*
  *                                  Local                                     *
@@ -33,15 +42,38 @@
 typedef struct _Gegueb_Window
 {
 	Egueb_Dom_Window *ewin;
+	/* features */
 	Egueb_Dom_Feature *fwin;
 	Egueb_Dom_Feature *fren;
+	Egueb_Dom_Input *input;
+#if BUILD_EGUEB_SMIL
+	Egueb_Dom_Feature *fanim;
+#endif
 	Egueb_Dom_Node *doc;
 	Enesim_Surface *s;
 	cairo_surface_t *cs;
 	Eina_List *damages;
 	GdkRegion *regions;
 	GdkWindow *win;
+	guint idle_id;
+	guint anim_id;
 } Gegueb_Window;
+
+#if BUILD_EGUEB_SMIL
+static gboolean _gegueb_timer_cb(void *data)
+{
+	Gegueb_Window *thiz = data;
+
+	egueb_smil_feature_animation_tick(thiz->fanim);
+	return TRUE;
+}
+#endif
+
+static void _gegueb_surface_free(void *buffer_data, void *data)
+{
+	cairo_surface_t *cs = data;
+	cairo_surface_destroy(cs);
+}
 
 static void _gegueb_window_draw(Gegueb_Window *thiz)
 {
@@ -75,11 +107,6 @@ static void _gegueb_window_draw(Gegueb_Window *thiz)
 	//gdk_window_flush(thiz->win);
 }
 
-static void _gegueb_surface_free(void *buffer_data, void *data)
-{
-	cairo_surface_t *cs = data;
-	cairo_surface_destroy(cs);
-}
 
 static Eina_Bool _gegueb_window_damages(Egueb_Dom_Feature *f,
 		Eina_Rectangle *area, void *data)
@@ -106,7 +133,8 @@ static gboolean _gegueb_window_idle_cb(gpointer user_data)
 	egueb_dom_feature_render_damages_get(thiz->fren, thiz->s,
 				_gegueb_window_damages, thiz);
 done:
-	return TRUE;
+	thiz->idle_id = 0;
+	return FALSE;
 }
 
 static void _gegueb_event_cb(GdkEvent *event, gpointer user_data)
@@ -172,11 +200,51 @@ static void _gegueb_event_cb(GdkEvent *event, gpointer user_data)
 		case GDK_DELETE:
 		egueb_dom_window_close_notify(thiz->ewin);
 		break;
+
+		case GDK_MOTION_NOTIFY:
+		printf("ui motion\n");
+		break;
+
+		case GDK_BUTTON_PRESS:
+		printf("ui button press\n");
+		break;
+
+		case GDK_BUTTON_RELEASE:
+		printf("ui button release\n");
+		break;
+
+		case GDK_KEY_PRESS:
+		printf("ui key press\n");
+		break;
+
+		case GDK_KEY_RELEASE:
+		printf("ui key release\n");
+		break;
+
+		case GDK_ENTER_NOTIFY:
+		printf("ui enter\n");
+		break;
+
+		case GDK_LEAVE_NOTIFY:
+		printf("ui leave\n");
+		break;
+
+		case GDK_FOCUS_CHANGE:
+		printf("ui focus\n");
+		break;
 	}
 }
 /*----------------------------------------------------------------------------*
  *                               Event handlers                               *
  *----------------------------------------------------------------------------*/
+static void _gegueb_document_process_cb(Egueb_Dom_Event *ev, void *data)
+{
+	Gegueb_Window *thiz = data;
+
+	if (thiz->idle_id)
+		return;
+	thiz->idle_id = g_idle_add(_gegueb_window_idle_cb, thiz);
+}
 /*============================================================================*
  *                                 Global                                     *
  *============================================================================*/
@@ -185,6 +253,17 @@ static void _gegueb_event_cb(GdkEvent *event, gpointer user_data)
  *----------------------------------------------------------------------------*/
 static void _gegueb_window_destroy(void *data)
 {
+	Gegueb_Window *thiz = data;
+
+	egueb_dom_feature_unref(thiz->fwin);
+	egueb_dom_feature_unref(thiz->fren);
+	if (thiz->input)
+		egueb_dom_input_unref(thiz->input);
+#if BUILD_EGUEB_SMIL
+	egueb_dom_feature_unref(thiz->fanim);
+#endif
+	egueb_dom_node_unref(thiz->doc);
+	gdk_window_destroy(thiz->win);
 }
 
 static int _gegueb_window_width_get(void *data)
@@ -229,7 +308,9 @@ EAPI Egueb_Dom_Window * gegueb_window_new(Egueb_Dom_Node *doc,
 	Gegueb_Window *thiz;
 	Egueb_Dom_Window *ret = NULL;
 	Egueb_Dom_Node *topmost;
+	Egueb_Dom_Feature *f;
 	GdkWindowAttr attr;
+	gint event_mask;
 
 	if (!doc) return NULL;
 
@@ -293,21 +374,57 @@ EAPI Egueb_Dom_Window * gegueb_window_new(Egueb_Dom_Node *doc,
 		goto no_size;
 	}
 	egueb_dom_feature_window_size_set(thiz->fwin, w, h);
+	/* check whenever we need to process */
+	egueb_dom_event_target_event_listener_add(
+			EGUEB_DOM_EVENT_TARGET_CAST(doc),
+			EGUEB_DOM_EVENT_PROCESS, _gegueb_document_process_cb,
+			EINA_FALSE, thiz);
+	/* check for conditional features */
+#if BUILD_EGUEB_SMIL
+	/* check for animation feature */
+	thiz->fanim = egueb_dom_node_feature_get(topmost,
+			EGUEB_SMIL_FEATURE_ANIMATION_NAME, NULL);
+	/* register our own timer for the anim in case we have one */
+	if (thiz->fanim)
+	{
+		int fps;
+
+		egueb_smil_feature_animation_fps_get(thiz->fanim, &fps);
+		if (fps > 0)
+		{
+			thiz->anim_id = g_timeout_add((1.0/fps) * 1000,
+					_gegueb_timer_cb, thiz);
+		}
+	}
+#endif
+	/* set the event mask */
+	event_mask = GDK_EXPOSURE_MASK;
+
+	f = egueb_dom_node_feature_get(topmost,
+			EGUEB_DOM_FEATURE_UI_NAME, NULL);
+	if (f)
+	{
+		thiz->input = egueb_dom_feature_ui_input_get(f);
+		event_mask |= GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK |
+				GDK_BUTTON_RELEASE_MASK | GDK_KEY_PRESS_MASK |
+				GDK_KEY_RELEASE_MASK;
+	}
 
 	/* set the window attributes */
 	attr.width = w;
 	attr.height = h;
 	attr.window_type = GDK_WINDOW_TOPLEVEL;
-	attr.event_mask = GDK_EXPOSURE_MASK;
+	attr.event_mask = event_mask;
 
 	thiz->regions = gdk_region_new();
 	thiz->doc = doc;
 	thiz->win = gdk_window_new(NULL, &attr, 0);
 	gdk_event_handler_set(_gegueb_event_cb, thiz, NULL);
-	g_idle_add(_gegueb_window_idle_cb, thiz);
+	thiz->idle_id = g_idle_add(_gegueb_window_idle_cb, thiz);
 
 	thiz->ewin = egueb_dom_window_new(&_dom_descriptor, doc, thiz);
 	gdk_window_show(thiz->win);
+	egueb_dom_node_unref(topmost);
 
 	return thiz->ewin;
 
