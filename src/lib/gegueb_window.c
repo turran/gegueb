@@ -279,7 +279,7 @@ static int _gegueb_window_height_get(void *data)
 }
 
 static void * _gegueb_window_timeout_set(void *data,
-		Egueb_Dom_Window_Descriptor_Timeout_Cb cb,
+		Egueb_Dom_Window_Timeout_Cb cb,
 		int64_t delay, void *user_data)
 {
 	return NULL;
