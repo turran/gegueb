@@ -24,9 +24,16 @@
 /*============================================================================*
  *                                  Local                                     *
  *============================================================================*/
+/* Properties */
+enum
+{
+	PROP_0,
+	PROP_DOCUMENT,
+};
+
 struct _GeguebWidgetPrivate
 {
-
+	Egueb_Dom_Node *doc;
 };
 
 G_DEFINE_TYPE (GeguebWidget, gegueb_widget, GTK_TYPE_DRAWING_AREA)
@@ -105,10 +112,8 @@ gegueb_widget_init (GeguebWidget *thiz)
 
 /**
  * gegueb_widget_new:
- * @buffer: a #GtkSourceBuffer.
  *
- * Creates a new #GeguebWidget widget displaying the buffer
- * @buffer. One buffer can be shared among many widgets.
+ * Creates a new #GeguebWidget
  *
  * Return value: a new #GeguebWidget.
  **/
