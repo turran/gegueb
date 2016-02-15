@@ -24,6 +24,7 @@
 
 #include "gegueb_main.h"
 #include "gegueb_window.h"
+#include "gegueb_widget.h"
 
 #endif /* _GEGUEB_H_ */
 
