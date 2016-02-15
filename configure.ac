@@ -52,11 +52,11 @@ fi
 
 ### Checks for libraries
 
-requirements_pc="egueb-dom >= 0.0.23 enesim >= 0.0.15 gdk-2.0 glib-2.0"
+requirements_pc="egueb-dom >= 0.0.23 enesim >= 0.0.15 gtk+-2.0 gdk-2.0 glib-2.0"
 AC_SUBST([requirements_pc])
 PKG_CHECK_MODULES([GEGUEB], [${requirements_pc}])
 
-requirements_bin_pc="egueb-dom >= 0.0.23 enesim >= 0.0.15 gdk-2.0 glib-2.0"
+requirements_bin_pc="egueb-dom >= 0.0.23 enesim >= 0.0.15 gtk+-2.0 gdk-2.0 glib-2.0"
 PKG_CHECK_MODULES([GEGUEB_BIN], [${requirements_bin_pc}])
 
 ### GDK X window
@@ -198,7 +198,6 @@ echo "  SVG support...............................: ${build_egueb_svg}"
 echo "  Window support:"
 echo "    GDK X.................................: ${build_gdk_x11}"
 echo "    GDK Win32.............................: ${build_gdk_win32}"
-echo
 echo
 echo "Compilation.................................: make (or gmake)"
 echo "  CPPFLAGS..................................: $CPPFLAGS"
