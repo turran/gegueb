@@ -6,6 +6,7 @@ dist_install_gegueb_headers_DATA = \
 src/lib/Gegueb.h \
 src/lib/gegueb_build.h \
 src/lib/gegueb_main.h \
+src/lib/gegueb_widget.h \
 src/lib/gegueb_window.h
 
 src_lib_libgegueb_la_CPPFLAGS = \
@@ -15,6 +16,7 @@ src_lib_libgegueb_la_CPPFLAGS = \
 src_lib_libgegueb_la_SOURCES = \
 src/lib/gegueb_document.c \
 src/lib/gegueb_main.c \
+src/lib/gegueb_widget.c \
 src/lib/gegueb_window.c
 
 src_lib_libgegueb_la_LIBADD = @GEGUEB_LIBS@
