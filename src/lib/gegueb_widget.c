@@ -40,6 +40,43 @@ G_DEFINE_TYPE (GeguebWidget, gegueb_widget, GTK_TYPE_DRAWING_AREA)
 /*----------------------------------------------------------------------------*
  *                             GObject interface                              *
  *----------------------------------------------------------------------------*/
+static void gegueb_widget_set_property(GObject *object, guint prop_id,
+		const GValue *value, GParamSpec *pspec)
+{
+	GeguebWidget *thiz = GEGUEB_WIDGET(object);
+
+	printf("set property\n");
+	switch (prop_id)
+	{
+		case PROP_DOCUMENT:
+		egueb_dom_node_unref(thiz->priv->doc);
+		thiz->priv->doc = g_value_get_pointer(value);
+		break;
+
+		default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+		break;
+	}
+}
+
+static void gegueb_widget_get_property(GObject *object, guint prop_id,
+		GValue *value, GParamSpec *pspec)
+{
+	GeguebWidget *thiz = GEGUEB_WIDGET(object);
+
+	printf("get property\n");
+	switch (prop_id)
+	{
+		case PROP_DOCUMENT:
+		g_value_set_pointer(value, egueb_dom_node_ref(thiz->priv->doc));
+		break;
+
+		default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+		break;
+	}
+}
+
 static void gegueb_widget_finalize(GObject *object)
 {
 	printf("finalize\n");
@@ -87,9 +124,13 @@ gegueb_widget_class_init (GeguebWidgetClass *klass)
 
 	/* override parents */
 	object_class->finalize = gegueb_widget_finalize;
+	object_class->set_property = gegueb_widget_set_property;
+	object_class->get_property = gegueb_widget_get_property;
 	g_type_class_add_private(object_class, sizeof(GeguebWidgetPrivate));
 	/* properties */
-	/* TODO the doc */
+	g_object_class_install_property(object_class, PROP_DOCUMENT,
+		g_param_spec_pointer("document", "document", "document",
+		G_PARAM_READWRITE));
 
 	widget_class->key_press_event = gegueb_widget_key_press_event;
 	widget_class->expose_event = gegueb_widget_expose;
@@ -100,7 +141,8 @@ gegueb_widget_class_init (GeguebWidgetClass *klass)
 static void
 gegueb_widget_init (GeguebWidget *thiz)
 {
-
+	thiz->priv = G_TYPE_INSTANCE_GET_PRIVATE (thiz, GEGUEB_TYPE_WIDGET,
+			GeguebWidgetPrivate);
 }
 /*============================================================================*
  *                                 Global                                     *
