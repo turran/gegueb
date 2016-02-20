@@ -89,7 +89,7 @@ int main(int argc, char *argv[])
 	filename = argv[optind];
 	if (stat(filename, &st) < 0)
 	{
-		printf("No SVG files found\n");
+		printf("No file found\n");
 		help(argv[0]);
 		goto done;
 	}

@@ -70,7 +70,7 @@ static gboolean _gegueb_document_anim_timer_cb(void *data)
 }
 #endif
 
-static Eina_Bool _gegueb_window_damages(Egueb_Dom_Feature *f,
+static Eina_Bool _gegueb_document_damages(Egueb_Dom_Feature *f,
 		Eina_Rectangle *area, void *data)
 {
 	Gegueb_Document *thiz = data;
@@ -86,7 +86,7 @@ static Eina_Bool _gegueb_window_damages(Egueb_Dom_Feature *f,
 	return EINA_TRUE;
 }
 
-static gboolean _gegueb_window_idle_cb(gpointer user_data)
+static gboolean _gegueb_document_idle_cb(gpointer user_data)
 {
 	Gegueb_Document *thiz = user_data;
 
@@ -96,7 +96,7 @@ static gboolean _gegueb_window_idle_cb(gpointer user_data)
 	if (!thiz->s)
 		goto done;
 	egueb_dom_feature_render_damages_get(thiz->fren, thiz->s,
-				_gegueb_window_damages, thiz);
+				_gegueb_document_damages, thiz);
 done:
 	thiz->idle_id = 0;
 	return FALSE;
@@ -110,7 +110,7 @@ static void _gegueb_document_process_cb(Egueb_Dom_Event *ev, void *data)
 
 	if (thiz->idle_id)
 		return;
-	thiz->idle_id = g_idle_add(_gegueb_window_idle_cb, thiz);
+	thiz->idle_id = g_idle_add(_gegueb_document_idle_cb, thiz);
 }
 /*============================================================================*
  *                                 Global                                     *
@@ -145,7 +145,6 @@ void gegueb_document_document_set(Gegueb_Document *thiz,
 		egueb_dom_feature_unref(thiz->fren);
 		thiz->fren = NULL;
 	}
-
 	if (thiz->fwin)
 	{
 		egueb_dom_feature_unref(thiz->fwin);
@@ -214,7 +213,7 @@ void gegueb_document_document_set(Gegueb_Document *thiz,
 		egueb_dom_node_unref(topmost);
 
 		/* do the first process */
-		thiz->idle_id = g_idle_add(_gegueb_window_idle_cb, thiz);
+		thiz->idle_id = g_idle_add(_gegueb_document_idle_cb, thiz);
 	}
 }
 
@@ -256,11 +255,8 @@ void gegueb_document_draw(Gegueb_Document *thiz, cairo_t *cr,
 	cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
 	cairo_set_source_surface(cr, gegueb_surface_suface_get(thiz->s), 0, 0);
 	cairo_paint(cr);
-	cairo_destroy(cr);
 	//cairo_clip(cr);
 
 	EINA_LIST_FREE(damages, r)
-	{
 		free(r);
-	}
 }

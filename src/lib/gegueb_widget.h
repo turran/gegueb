@@ -36,18 +36,18 @@ typedef struct _GeguebWidgetPrivate GeguebWidgetPrivate;
 
 struct _GeguebWidget
 {
-	GtkDrawingArea parent;
+	GtkWidget parent;
 	GeguebWidgetPrivate *priv;
 };
 
 struct _GeguebWidgetClass
 {
-	GtkDrawingAreaClass parent_class;
+	GtkWidgetClass parent_class;
 };
 
 GType gegueb_widget_get_type (void) G_GNUC_CONST;
 
 /* Constructors */
-GtkWidget *gegueb_widget_new(Egueb_Dom_Node *doc);
+GtkWidget *gegueb_widget_new(void);
 
 #endif

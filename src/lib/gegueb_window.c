@@ -46,6 +46,7 @@ static void _gegueb_window_draw(Gegueb_Window *thiz)
 	gdk_region_empty(thiz->regions);
 	//gdk_window_end_paint(thiz->win);
 	//gdk_window_flush(thiz->win);
+	cairo_destroy(cr);
 	thiz->damages = NULL;
 }
 
@@ -140,9 +141,13 @@ static void _gegueb_event_cb(GdkEvent *event, gpointer user_data)
 static void _gegueb_window_destroy(void *data)
 {
 	Gegueb_Window *thiz = data;
+	Eina_Rectangle *r;
 
 	gegueb_document_free(thiz->doc);
 	gdk_window_destroy(thiz->win);
+	gdk_region_destroy(thiz->regions);
+	EINA_LIST_FREE(thiz->damages, r)
+		free(r);
 	g_free(thiz);
 }
 
@@ -276,12 +281,15 @@ EAPI Egueb_Dom_Window * gegueb_window_new(Egueb_Dom_Node *doc,
 	attr.window_type = GDK_WINDOW_TOPLEVEL;
 	attr.event_mask = event_mask;
 
-	thiz->regions = gdk_region_new();
 	thiz->doc = gegueb_document_new();
 	gegueb_document_document_set(thiz->doc, doc);
+	gegueb_document_damage_cb_set(thiz->doc, _gegueb_window_damages, thiz);
+
+	thiz->regions = gdk_region_new();
 	thiz->win = gdk_window_new(NULL, &attr, 0);
-	gdk_event_handler_set(_gegueb_event_cb, thiz, NULL);
 	thiz->ewin = egueb_dom_window_new(&_dom_descriptor, doc, thiz);
+
+	gdk_event_handler_set(_gegueb_event_cb, thiz, NULL);
 	gdk_window_show(thiz->win);
 	egueb_dom_node_unref(topmost);
 

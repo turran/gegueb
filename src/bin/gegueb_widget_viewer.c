@@ -10,6 +10,22 @@ int main (int argc, char *argv[])
 {
 	GtkWidget *window;
 	GtkWidget *w;
+	Enesim_Stream *s;
+	Egueb_Dom_Node *doc = NULL;
+
+	gegueb_init();
+	s = enesim_stream_file_new(argv[1], "rb");
+	if (!s)
+	{
+		printf("Failed to read file %s\n", argv[1]);
+		return -1;
+	}
+	egueb_dom_parser_parse(s, &doc);
+	if (!doc)
+	{
+		printf("Failed to parse file %s\n", argv[1]);
+		return -1;
+	}
 
 	gtk_init(&argc, &argv);
 	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -17,9 +33,9 @@ int main (int argc, char *argv[])
 
 	g_signal_connect(G_OBJECT(window), "destroy",
 			G_CALLBACK(destroy), NULL);
-	w = gegueb_widget_new(NULL);
+	w = gegueb_widget_new();
+	g_object_set(w, "document", doc, NULL);
 	gtk_container_add(GTK_CONTAINER (window), w);
-	gtk_drawing_area_size(GTK_DRAWING_AREA (w), 200, 200);
 	gtk_widget_show(w);
 	gtk_widget_show(window);
 
