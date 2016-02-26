@@ -287,7 +287,8 @@ EAPI Egueb_Dom_Window * gegueb_window_new(Egueb_Dom_Node *doc,
 
 	thiz->regions = gdk_region_new();
 	thiz->win = gdk_window_new(NULL, &attr, 0);
-	thiz->ewin = egueb_dom_window_new(&_dom_descriptor, doc, thiz);
+	thiz->ewin = egueb_dom_window_new(&_dom_descriptor, thiz);
+	egueb_dom_window_document_set(thiz->ewin, doc);
 
 	gdk_event_handler_set(_gegueb_event_cb, thiz, NULL);
 	gdk_window_show(thiz->win);
